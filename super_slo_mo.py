@@ -70,7 +70,7 @@ def main():
     end = args.img_last
     num_width = args.num_width
     working_prefix = os.path.join(save_path, basefile)
-    for n in tqdm(range(start, end), desc="Total", position=1):
+    for n in tqdm(range(start, end), desc="Total", position=0):
         continued = n > start
         split_frames(net, args.num_splits, basepath, basefile, n, n+1, num_width, working_prefix, save_path, continued)
 
@@ -78,16 +78,15 @@ def split_frames(net, num_splits, basepath, basefile, start, end, num_width, wor
     init_record()
     reset_split_count(num_splits)
 
-    # 2 to the power of the number of doublings, exclusive
+    # Computing the count of work steps needed based on the number of splits:
+    # Before splitting, there's one existing region between the start & end frames.
+    # Each split doubles the number of regions.
+    # Work steps = the final number of region - the existing region.
     max_steps = 2 ** num_splits - 1
-    init_progress(max_steps, "Frame #" + str(start + 1))
-
-    # first_file = basepath + "\\" + basefile + str(start).zfill(num_width) + ".png"
-    # last_file = basepath + "\\" + basefile + str(end).zfill(num_width) + ".png"
+    init_progress(num_splits, max_steps, "Frame #" + str(start + 1))
 
     first_file = source_filepath(basepath, basefile, start, num_width)
     last_file = source_filepath(basepath, basefile, end, num_width)
-
     img0 = cv2.imread(first_file)
     img1 = cv2.imread(last_file)
 
@@ -112,11 +111,6 @@ def split_frames(net, num_splits, basepath, basefile, start, end, num_width, wor
 def recursive_split_frames(net, first_index, last_index, filepath_prefix):
     if enter_split():
         mid_index = first_index + (last_index - first_index) / 2.0
-
-        # first_filepath = filepath_prefix + str(first_index) + ".png"
-        # last_filepath = filepath_prefix + str(last_index) + ".png"
-        # mid_filepath = filepath_prefix + str(mid_index) + ".png"
-
         first_filepath = working_filepath(filepath_prefix, first_index)
         last_filepath = working_filepath(filepath_prefix, last_index)
         mid_filepath = working_filepath(filepath_prefix, mid_index)
@@ -222,18 +216,24 @@ def log(message):
         print(message)
 
 global split_progress
-def init_progress(max, description):
+split_progress = None
+def init_progress(num_splits, max, description):
     global split_progress
-    split_progress = tqdm(range(max), desc=description, position=0)
+    if num_splits < 2:
+        split_progress = None
+    else:
+        split_progress = tqdm(range(max), desc=description, position=-1)
 
 def step_progress():
     global split_progress
-    split_progress.update()
-    split_progress.refresh()
+    if split_progress:
+        split_progress.update()
+        split_progress.refresh()
 
 def close_progress():
     global split_progress
-    split_progress.close()
+    if split_progress:
+        split_progress.close()
 
 def source_filepath(basepath, basefile, index, num_width):
     filename = basefile + str(index).zfill(num_width) + ".png"
@@ -260,9 +260,30 @@ def load_networks(network, resume, strict=True):
 
     return network
 
+# todo
 # with one split the secondary tqdm is not needed, with verbose both not needed
 # encode the frame set being worked on in the temporary files for use in inspection
 # could presume the basefile is pngsequence to match reqesuenced output
+# automatic adding of the number of splits to the output folder
+# option to automatically resequence the output
+# add -X2 -X4 etc to output path to make it easy to keep separated
+
+
+# ideas to autodetect settings
+
+# assumtions:
+# files share a common base alphanumeric name
+# the filenames are the same length
+# where the names differ is at end end and only numerals
+# the files are sequential and all present 
+# the starting index can be >= 0
+
+# process:
+# - get list of files from folder
+# - sort the list
+# - get the first and last entry
+# - call a function to return the length of common characters between both filenames
+# - use that to compute the base name
 
 
 if __name__ == '__main__':
