@@ -10,7 +10,7 @@ def main():
     parser.add_argument("--new_name", default="pngsequence", type=str, help="New filename, default 'pngsequence'")
     parser.add_argument("--start", default=0, type=int, help="Starting index, default 0")
     parser.add_argument("--step", default=1, type=int, help="Index step, default is 1")
-    parser.add_argument("--copy", dest="copy", default=False, action="store_true", help="Copy rather than rename files")
+    parser.add_argument("--rename", dest="rename", default=False, action="store_true", help="Rename rather than copy files")
     parser.add_argument("--verbose", dest="verbose", default=False, action="store_true", help="Show extra details")
     args = parser.parse_args()
 
@@ -31,12 +31,12 @@ def main():
         old_filepath = os.path.join(args.path, file)
         new_filepath = os.path.join(args.path, new_filename)
 
-        if args.copy:
-            shutil.copy(old_filepath, new_filepath)
-            log(f"File {file} copied to {new_filename}")
-        else:
+        if args.rename:
             os.replace(old_filepath, new_filepath)
             log(f"File {file} renamed to {new_filename}")
+        else:
+            shutil.copy(old_filepath, new_filepath)
+            log(f"File {file} copied to {new_filename}")
 
         index += args.step
 
