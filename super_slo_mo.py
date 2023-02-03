@@ -70,7 +70,8 @@ def main():
     end = args.img_last
     num_width = args.num_width
     working_prefix = os.path.join(save_path, basefile)
-    for n in tqdm(range(start, end), desc="Total", position=0):
+    pbar_desc = "Frames" if args.num_splits < 2 else "Total"
+    for n in tqdm(range(start, end), desc=pbar_desc, position=0):
         continued = n > start
         split_frames(net, args.num_splits, basepath, basefile, n, n+1, num_width, working_prefix, save_path, continued)
 
