@@ -3,6 +3,7 @@ import shutil
 import glob
 import argparse
 from tqdm import tqdm
+from typing import Callable
 
 def main():
     parser = argparse.ArgumentParser(description='Resequence video frame PNG files')
@@ -15,30 +16,7 @@ def main():
     args = parser.parse_args()
 
     init_log(args.verbose)
-
-    files = glob.glob(os.path.join(args.path, "*.png"))
-
-    files = sorted(os.listdir(args.path))
-    num_files = len(files)
-    log(f"Found {num_files} files")
-
-    max_file_num = num_files * args.step
-    num_width = len(str(max_file_num))
-
-    index = 0
-    for file in tqdm(files):
-        new_filename = args.new_name + str(index).zfill(num_width) + ".png"
-        old_filepath = os.path.join(args.path, file)
-        new_filepath = os.path.join(args.path, new_filename)
-
-        if args.rename:
-            os.replace(old_filepath, new_filepath)
-            log(f"File {file} renamed to {new_filename}")
-        else:
-            shutil.copy(old_filepath, new_filepath)
-            log(f"File {file} copied to {new_filename}")
-
-        index += args.step
+    ResequenceFiles(args.path, "png", args.new_name, args.start, args.step, args.rename, log).invoke()
 
 global verbose
 verbose = False
@@ -51,6 +29,48 @@ def log(message):
     global verbose
     if verbose:
         print(message)
+
+class ResequenceFiles:
+    def __init__(self, path : str, file_type : str, new_base_filename : str, start_index : int, index_step : int, rename : bool , log_fn : Callable):
+        self.path = path
+        self.file_type = file_type
+        self.new_base_filename = new_base_filename
+        self.start_index = start_index
+        self.index_step = index_step
+        self.rename = rename
+        self.log_fn = log_fn
+        self.num_files = 0
+        self.max_file_num = 0
+        self.num_width = 0
+
+    def log(self, message):
+        if self.log_fn:
+            self.log_fn(message)
+
+    def invoke(self):
+        files = sorted(glob.glob(os.path.join(self.path, "*." + self.file_type)))
+
+        self.num_files = len(files)
+        log(f"Found {self.num_files} files")
+
+        self.max_file_num = self.num_files * self.index_step
+        self.num_width = len(str(self.max_file_num))
+
+        index = 0
+        pbar_title = "Renaming" if self.rename else "Copying"
+        for file in tqdm(files, desc=pbar_title):
+            new_filename = self.new_base_filename + str(index).zfill(self.num_width) + "." + self.file_type
+            old_filepath = os.path.join(self.path, file)
+            new_filepath = os.path.join(self.path, new_filename)
+
+            if self.rename:
+                os.replace(old_filepath, new_filepath)
+                log(f"File {file} renamed to {new_filename}")
+            else:
+                shutil.copy(old_filepath, new_filepath)
+                log(f"File {file} copied to {new_filename}")
+
+            index += self.index_step
 
 if __name__ == '__main__':
     main()
