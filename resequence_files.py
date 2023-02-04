@@ -4,6 +4,7 @@ import glob
 import argparse
 from tqdm import tqdm
 from typing import Callable
+from simple_log import SimpleLog
 
 def main():
     parser = argparse.ArgumentParser(description='Resequence video frame PNG files')
@@ -15,23 +16,18 @@ def main():
     parser.add_argument("--verbose", dest="verbose", default=False, action="store_true", help="Show extra details")
     args = parser.parse_args()
 
-    init_log(args.verbose)
-    ResequenceFiles(args.path, "png", args.new_name, args.start, args.step, args.rename, log).invoke()
-
-global verbose
-verbose = False
-
-def init_log(verbose_enabled):
-    global verbose
-    verbose = verbose_enabled
-
-def log(message):
-    global verbose
-    if verbose:
-        print(message)
+    log = SimpleLog(args.verbose)
+    ResequenceFiles(args.path, "png", args.new_name, args.start, args.step, args.rename, log.log).invoke()
 
 class ResequenceFiles:
-    def __init__(self, path : str, file_type : str, new_base_filename : str, start_index : int, index_step : int, rename : bool , log_fn : Callable):
+    def __init__(self, 
+                path : str,
+                file_type : str, 
+                new_base_filename : str, 
+                start_index : int, 
+                index_step : int, 
+                rename : bool , 
+                log_fn : Callable):
         self.path = path
         self.file_type = file_type
         self.new_base_filename = new_base_filename
@@ -43,15 +39,15 @@ class ResequenceFiles:
         self.max_file_num = 0
         self.num_width = 0
 
-    def log(self, message):
+    def log(self, message : str) -> None:
         if self.log_fn:
             self.log_fn(message)
 
-    def invoke(self):
+    def invoke(self) -> None:
         files = sorted(glob.glob(os.path.join(self.path, "*." + self.file_type)))
 
         self.num_files = len(files)
-        log(f"Found {self.num_files} files")
+        self.log(f"Found {self.num_files} files")
 
         self.max_file_num = self.num_files * self.index_step
         self.num_width = len(str(self.max_file_num))
@@ -60,17 +56,18 @@ class ResequenceFiles:
         pbar_title = "Renaming" if self.rename else "Copying"
         for file in tqdm(files, desc=pbar_title):
             new_filename = self.new_base_filename + str(index).zfill(self.num_width) + "." + self.file_type
-            old_filepath = os.path.join(self.path, file)
+            old_filepath = file
             new_filepath = os.path.join(self.path, new_filename)
 
             if self.rename:
                 os.replace(old_filepath, new_filepath)
-                log(f"File {file} renamed to {new_filename}")
+                self.log(f"File {file} renamed to {new_filename}")
             else:
                 shutil.copy(old_filepath, new_filepath)
-                log(f"File {file} copied to {new_filename}")
+                self.log(f"File {file} copied to {new_filename}")
 
             index += self.index_step
+
 
 if __name__ == '__main__':
     main()
