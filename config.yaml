@@ -1,0 +1,4 @@
+output_dirs:
+  output_interpolate: "./output/interpolate"
+model: "./pretrained_models/pretrained_VFIformer/net_220.pth"
+gpu_ids: "0"
