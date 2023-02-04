@@ -22,19 +22,20 @@ def main():
     args = parser.parse_args()
 
     log = SimpleLog(args.verbose)
-    engine = InterpolateEngine(args)
+    engine = InterpolateEngine(args.model, args.gpu_ids)
     interpolater = Interpolate(engine.model, log.log)
     interpolater.create_mid_frame(args.img_before, args.img_after, args.img_new)
 
 class Interpolate:
     def __init__(self, 
                 model,
-                log_fn : Callable):
+                log_fn : Callable | None):
         self.model = model
         self.log_fn = log_fn
 
     def log(self, message):
-        self.log_fn(message)
+        if self.log_fn:
+            self.log_fn(message)
 
     def create_mid_frame(self, before_filepath, after_filepath, middle_filepath):
         img0 = cv2.imread(before_filepath)
