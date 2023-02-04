@@ -7,41 +7,48 @@ from skimage.color import rgb2yuv, yuv2rgb
 from utils.util import setup_logger, print_args
 from utils.pytorch_msssim import ssim_matlab
 from models.modules import define_G
+from collections import namedtuple
 
+# Singleton class with the loaded VFIformer model
+# model: path to model such as "./pretrained_models/pretrained_VFIformer/net_220.pth"
+# gpu_ids: e.g. "0" "0,1,2, 0,2" use "-1" for CPU
 class InterpolateEngine:
-    def __init__(self, args : dict):
-        self.args = args
-        self.init_device()
-        self.model = self.init_model()
+    def __new__(cls, model : str, gpu_ids : str):
+        if not hasattr(cls, 'instance'):
+            cls.instance = super(InterpolateEngine, cls).__new__(cls)
+            cls.instance.init(model, gpu_ids)
+        return cls.instance
 
-    def init_device(self):
-        str_ids = self.args.gpu_ids.split(',')
-        self.args.gpu_ids = []
+    def init(self, model : str, gpu_ids: str):
+        gpu_id_array = self.init_device(gpu_ids)
+        self.model = self.init_model(model, gpu_id_array)
+
+    def init_device(self, gpu_ids : str):
+        str_ids = gpu_ids.split(',')
+        gpu_ids = []
         for str_id in str_ids:
             id = int(str_id)
             if id >= 0:
-                self.args.gpu_ids.append(id)
-        if len(self.args.gpu_ids) > 0:
-            torch.cuda.set_device(self.args.gpu_ids[0])
-
+                gpu_ids.append(id)
+        if len(gpu_ids) > 0:
+            torch.cuda.set_device(gpu_ids[0])
         cudnn.benchmark = True
+        return gpu_ids
 
-    def init_model(self):
-        args = self.args
-
-        # defaults instead of args from original code that don't need setting
-        args.crop_size = 192
-        args.dist = False
-        args.rank = -1
-        args.phase = "test"
-        args.resume_flownet = ""
-        args.net_name = "VFIformer"
-
-        ## load model
-        device = torch.device('cuda' if len(args.gpu_ids) != 0 else 'cpu')
-        args.device = device
+    def init_model(self, model, gpu_id_array):
+        device = torch.device('cuda' if len(gpu_id_array) != 0 else 'cpu')
+        args = Args(model = model,
+                    gpu_ids = gpu_id_array,
+                    device = device,
+                    # needed in original downstream code
+                    crop_size = 192,
+                    dist = False,
+                    rank = -1,
+                    phase = "test",
+                    resume_flownet = "",
+                    net_name = "VFIformer")
         net = define_G(args)
-        net = self.load_networks(net, args.model)
+        net = self.load_networks(net, model)
         net.eval()
         return net
 
@@ -61,3 +68,6 @@ class InterpolateEngine:
         else:
             network.load_state_dict(load_net_clean, strict=strict)
         return network
+
+def Args(**kwargs):
+    return namedtuple("Args", kwargs.keys())(**kwargs)
