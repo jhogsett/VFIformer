@@ -24,7 +24,7 @@ def main():
     log = SimpleLog(args.verbose)
     engine = InterpolateEngine(args.model, args.gpu_ids)
     interpolater = Interpolate(engine.model, log.log)
-    interpolater.create_mid_frame(args.img_before, args.img_after, args.img_new)
+    interpolater.create_between_frame(args.img_before, args.img_after, args.img_new)
 
 class Interpolate:
     def __init__(self, 
@@ -37,7 +37,7 @@ class Interpolate:
         if self.log_fn:
             self.log_fn(message)
 
-    def create_mid_frame(self, before_filepath, after_filepath, middle_filepath):
+    def create_between_frame(self, before_filepath : str, after_filepath : str, middle_filepath : str):
         img0 = cv2.imread(before_filepath)
         img1 = cv2.imread(after_filepath)
 
