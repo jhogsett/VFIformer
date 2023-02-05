@@ -4,5 +4,10 @@ output_dirs:
 model: "./pretrained_models/pretrained_VFIformer/net_220.pth"
 gpu_ids: "0"
 auto_launch_browser: True
-server_port: 7860
+server_port: 7862
 server_name: "0.0.0.0"
+interpolate_settings:
+  gif_duration: 1000
+user_interface:
+  theme: "default"
+  css_file: "webui.css"
