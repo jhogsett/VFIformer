@@ -4,6 +4,7 @@ import numpy as np
 import gradio as gr
 from interpolate_engine import InterpolateEngine
 from interpolate import Interpolate
+from deep_interpolate import DeepInterpolate
 from simple_log import SimpleLog
 from simple_config import SimpleConfig
 from auto_increment import AutoIncrementFilename, AutoIncrementDirectory
@@ -31,8 +32,8 @@ def main():
 
 def interpolate(img_before_file : str, img_after_file : str, num_splits : float):
     global log, config, engine, file_output
-
     file_output.update(visible=False)
+
     if img_before_file and img_after_file:
         interpolater = Interpolate(engine.model, log.log)
 
@@ -50,6 +51,36 @@ def interpolate(img_before_file : str, img_after_file : str, num_splits : float)
         log.log("creating preview file " + img_between_file)
         duration = config.interpolate_settings["gif_duration"]
         create_gif([img_before_file, img_between_file, img_after_file], img_output_gif, duration=duration)
+
+        download_visible = num_splits == 1
+        download_file = img_between_file if download_visible else None
+        return gr.Image.update(value=img_output_gif), gr.File.update(value=download_file, visible=download_visible)
+    else:
+        return None, None
+
+def deep_interpolate(img_before_file : str, img_after_file : str, num_splits : float):
+    global log, config, engine, file_output
+    file_output.update(visible=False)
+
+    if img_before_file and img_after_file:
+        interpolater = Interpolate(engine.model, log.log)
+        deep_interpolater = DeepInterpolate(interpolater, log.log)
+
+        base_output_path = config.directories["output_interpolate"]
+        output_path, _ = AutoIncrementDirectory(base_output_path).next_directory("run")
+
+        output_basename = "interpolated_frames"
+        extension = "png"
+        img_between_file, image_index = AutoIncrementFilename(output_path, extension).next_filename(output_basename, extension)
+
+        log.log("creating frame file " + img_between_file)
+        deep_interpolater.split_frames(img_before_file, img_after_file, num_splits, output_path, output_basename)
+
+        img_output_gif = os.path.join(output_path, output_basename + str(image_index) + ".gif")
+        log.log("creating preview file " + img_between_file)
+        output_paths = deep_interpolater.output_paths
+        duration = config.interpolate_settings["gif_duration"] / len(output_paths)
+        create_gif(output_paths, img_output_gif, duration=duration)
 
         download_visible = num_splits == 1
         download_file = img_between_file if download_visible else None
@@ -88,7 +119,7 @@ def create_ui():
                 image_output = gr.Image()
             image_button = gr.Button("Flip")
 
-        interpolate_button.click(interpolate, inputs=[img1_input, img2_input, splits_input], outputs=[img_output, file_output])
+        interpolate_button.click(deep_interpolate, inputs=[img1_input, img2_input, splits_input], outputs=[img_output, file_output])
         splits_input.change(update_splits_info, inputs=splits_input, outputs=info_output, show_progress=False)
         # image_button.click(flip_image, inputs=image_input, outputs=image_output)
     return app

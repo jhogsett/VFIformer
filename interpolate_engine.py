@@ -63,11 +63,5 @@ class InterpolateEngine:
                 load_net_clean[k[7:]] = v
             else:
                 load_net_clean[k] = v
-        if 'optimizer' or 'scheduler' in net_name:
-            network.load_state_dict(load_net_clean)
-        else:
-            network.load_state_dict(load_net_clean, strict=strict)
+        network.load_state_dict(load_net_clean, strict=strict)
         return network
-
-# def FauxArgs(**kwargs):
-#     return namedtuple("FauxArgs", kwargs.keys())(**kwargs)

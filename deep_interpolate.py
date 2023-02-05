@@ -10,7 +10,6 @@ from file_utils import create_directory
 from typing import Callable
 
 def main():
-    global log
     parser = argparse.ArgumentParser(description="Video Frame Interpolation (deep)")
     parser.add_argument("--model", default="./pretrained_models/pretrained_VFIformer/net_220.pth", type=str)
     parser.add_argument("--gpu_ids", type=str, default="0", help="gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU")
@@ -20,8 +19,8 @@ def main():
     parser.add_argument("--output_path", default="./output", type=str, help="Output path for interpolated PNGs")
     parser.add_argument("--base_filename", default="interpolated_frame", type=str, help="Base filename for interpolated PNGs")
     parser.add_argument("--verbose", dest="verbose", default=False, action="store_true", help="Show extra details")
-
     args = parser.parse_args()
+
     log = SimpleLog(args.verbose)
     create_directory(args.output_path)
     engine = InterpolateEngine(args.model, args.gpu_ids)
@@ -38,6 +37,7 @@ class DeepInterpolate():
         self.split_count = 0
         self.frame_register = []
         self.progress = None
+        self.output_paths = []
 
     def log(self, message):
         if self.log_fn:
@@ -85,7 +85,6 @@ class DeepInterpolate():
                             before_file, 
                             after_file, 
                             output_filepath_prefix):
-        global log
         img0 = cv2.imread(before_file)
         img1 = cv2.imread(after_file)
 
@@ -96,29 +95,30 @@ class DeepInterpolate():
 
         cv2.imwrite(before_file, img0)
         self.register_frame(before_file)
-        log.log("copied " + before_file)
+        self.log("copied " + before_file)
 
         cv2.imwrite(after_file, img1)
         self.register_frame(after_file)
-        log.log("copied " + after_file)
+        self.log("copied " + after_file)
 
     def integerize_filenames(self, output_path, base_name, continued):
-        global log
         file_prefix = os.path.join(output_path, base_name)
         frame_files = self.sorted_registered_frames()
         num_width = len(str(len(frame_files)))
         index = 0
+        self.output_paths = []
 
         for file in frame_files:
             if continued and index == 0:
                 # if a continuation from a previous set of frames, delete the first frame
                 # to maintain continuity since it's duplicate of the previous round last frame
                 os.remove(file)
-                log.log("removed uneeded " + file)
+                self.log("removed uneeded " + file)
             else:
                 new_filename = file_prefix + str(index).zfill(num_width) + ".png"
                 os.replace(file, new_filename)
-                log.log("renamed " + file + " to " + new_filename)
+                self.output_paths.append(new_filename)
+                self.log("renamed " + file + " to " + new_filename)
             index += 1
 
     def reset_split_manager(self, num_splits : int):
