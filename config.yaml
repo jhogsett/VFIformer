@@ -7,7 +7,7 @@ auto_launch_browser: True
 server_port: 7862
 server_name: "0.0.0.0"
 interpolate_settings:
-  gif_duration: 1000
+  gif_duration: 3000
 user_interface:
   theme: "default"
   css_file: "webui.css"
