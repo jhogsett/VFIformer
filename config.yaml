@@ -1,4 +1,5 @@
-output_dirs:
+directories:
+  working: "./temp"
   output_interpolate: "./output/interpolate"
   output_slowmotion: "./output/slowmotion"
 model: "./pretrained_models/pretrained_VFIformer/net_220.pth"

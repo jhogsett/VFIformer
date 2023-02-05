@@ -4,12 +4,12 @@ import numpy as np
 import gradio as gr
 from interpolate_engine import InterpolateEngine
 from interpolate import Interpolate
-from collections import namedtuple
 from simple_log import SimpleLog
 from simple_config import SimpleConfig
 from auto_increment_filename import AutoIncrementFilename
 from image_utils import create_gif
 from file_utils import create_directories
+from simple_utils import max_steps
 
 def main():
     global log, config, engine
@@ -21,7 +21,7 @@ def main():
 
     log = SimpleLog(args.verbose)
     config = SimpleConfig(args.config_path).config_obj()
-    create_directories(config.output_dirs)
+    create_directories(config.directories)
     engine = InterpolateEngine(config.model, config.gpu_ids)
 
     app = create_ui()
@@ -36,7 +36,7 @@ def interpolate(img_before_file : str, img_after_file : str, num_splits : float)
     if img_before_file and img_after_file:
         interpolater = Interpolate(engine.model, log.log)
 
-        output_path = config.output_dirs["output_interpolate"]
+        output_path = config.directories["output_interpolate"]
         output_basename = "interpolate"
         img_between_file = AutoIncrementFilename(output_path).next_filename(output_basename, "png")
         log.log("creating frame file " + img_between_file)
@@ -57,7 +57,7 @@ def update_splits_info(num_splits : float):
     # before the splits, there's one time region between the before and after frames
     # after the splits, there are 2 ** num_splits time regions
     # subtracting the original time region yields the number of new regions = number of new frames
-    return str(2 ** num_splits - 1)
+    return str(max_steps(num_splits))
 
 def create_ui():
     global config, file_output
