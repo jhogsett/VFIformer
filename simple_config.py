@@ -1,4 +1,5 @@
 import yaml
+from collections import namedtuple
 
 class SimpleConfig:
     def __new__(cls, path : str = "config.yaml"):
@@ -13,3 +14,6 @@ class SimpleConfig:
 
     def get(self, key : str):
         return self.config[key]
+
+    def config_obj(self):
+        return namedtuple("ConfigObj", self.config.keys())(*self.config.values())
