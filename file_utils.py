@@ -10,9 +10,7 @@ def create_directories(dirs : dict):
         create_directory(dirs[key])
 
 def get_files(path : str, extension : str = "*") -> list:
-    print(path)
     path = os.path.join(path, "*." + extension)
-
     entries = glob.glob(path)
     files = []
     for entry in entries:
