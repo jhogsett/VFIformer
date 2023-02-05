@@ -6,7 +6,7 @@ from interpolate_engine import InterpolateEngine
 from interpolate import Interpolate
 from simple_log import SimpleLog
 from simple_config import SimpleConfig
-from auto_increment_filename import AutoIncrementFilename
+from auto_increment import AutoIncrementFilename, AutoIncrementDirectory
 from image_utils import create_gif
 from file_utils import create_directories
 from simple_utils import max_steps
@@ -35,15 +35,19 @@ def interpolate(img_before_file : str, img_after_file : str, num_splits : float)
     file_output.update(visible=False)
     if img_before_file and img_after_file:
         interpolater = Interpolate(engine.model, log.log)
-        output_path = config.directories["output_interpolate"]
-        output_basename = "interpolate"
-        img_between_file = AutoIncrementFilename(output_path).next_filename(output_basename, "png")
+
+        base_output_path = config.directories["output_interpolate"]
+        output_path, _ = AutoIncrementDirectory(base_output_path).next_directory("run")
+
+        output_basename = "interpolated_frames"
+        extension = "png"
+        img_between_file, image_index = AutoIncrementFilename(output_path, extension).next_filename(output_basename, extension)
 
         log.log("creating frame file " + img_between_file)
         interpolater.create_between_frame(img_before_file, img_after_file, img_between_file)
 
-        img_output_gif = AutoIncrementFilename(output_path).next_filename(output_basename, "gif")
-        log.log("creating animated gif file " + img_between_file)
+        img_output_gif = os.path.join(output_path, output_basename + str(image_index) + ".gif")
+        log.log("creating preview file " + img_between_file)
         duration = config.interpolate_settings["gif_duration"]
         create_gif([img_before_file, img_between_file, img_after_file], img_output_gif, duration=duration)
 
@@ -125,7 +129,9 @@ def create_ui():
 
 
 
-# how EASY is it to incorporate R-ESRGAN 4x+ directly?
+# how EASY is it to incorporate R-ESRGAN 4x+ directly.
+
+# after interpolate, have options to download as a zip, gif or mp4
 
 if __name__ == '__main__':
     main()

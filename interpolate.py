@@ -12,7 +12,7 @@ from simple_log import SimpleLog
 from interpolate_engine import InterpolateEngine
 
 def main():
-    parser = argparse.ArgumentParser(description='Video Frame Interpolation')
+    parser = argparse.ArgumentParser(description='Video Frame Interpolation (shallow)')
     parser.add_argument('--model', default='./pretrained_models/pretrained_VFIformer/net_220.pth', type=str)
     parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
     parser.add_argument('--img_before', default="./images/image0.png", type=str, help="Path to before frame image")
