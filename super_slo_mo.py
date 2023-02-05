@@ -1,185 +1,150 @@
 import os
-import math
 import cv2
 import argparse
-from torch.nn.parallel import DistributedDataParallel
-from collections import OrderedDict
-import torch
-import torch.nn as nn
-import torch.backends.cudnn as cudnn
-import torchvision
 from skimage.color import rgb2yuv, yuv2rgb
 from utils.util import setup_logger, print_args
 from utils.pytorch_msssim import ssim_matlab
 from models.modules import define_G
 from tqdm import tqdm
+from interpolate_engine import InterpolateEngine
+from interpolate import Interpolate
+from simple_log import SimpleLog
+from simple_utils import max_steps
 
 def main():
+    global log
     parser = argparse.ArgumentParser(description='infinite division of video frames')
     parser.add_argument('--model', default='./pretrained_models/pretrained_VFIformer/net_220.pth', type=str)
     parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
     parser.add_argument('--save_folder', default='./output', type=str)
     parser.add_argument('--base_path', default='./images', type=str, help="path to png files")
-    parser.add_argument('--base_name', default='image', type=str, help="filename before 0-filled index number")
-    parser.add_argument('--img_first', default=0, type=int, help="first image index")
-    parser.add_argument('--img_last', default=2, type=int, help="last image index")
-    parser.add_argument('--num_width', default=1, type=int, help="index width for zero filling")
-    parser.add_argument('--num_splits', default=2, type=int, help="how many doublings of the pool of frames")
+
+    # parser.add_argument('--base_name', default='image', type=str, help="filename before 0-filled index number")
+    # parser.add_argument('--img_first', default=0, type=int, help="first image index")
+    # parser.add_argument('--img_last', default=2, type=int, help="last image index")
+
+    parser.add_argument('--img_before', default="./images/image0.png", type=str, help="Path to before frame image")
+    parser.add_argument('--img_after', default="./images/image2.png", type=str, help="Path to after frame image")
+
+    parser.add_argument('--num_width', default=5, type=int, help="index width for zero filling")
+    parser.add_argument('--num_splits', default=1, type=int, help="how many doublings of the pool of frames")
     parser.add_argument("--verbose", dest="verbose", default=False, action="store_true", help="Show extra details")
 
-    ## setup training environment
     args = parser.parse_args()
-
-    init_log(args.verbose)
-
-    ## setup training device
-    str_ids = args.gpu_ids.split(',')
-    args.gpu_ids = []
-    for str_id in str_ids:
-        id = int(str_id)
-        if id >= 0:
-            args.gpu_ids.append(id)
-    if len(args.gpu_ids) > 0:
-        torch.cuda.set_device(args.gpu_ids[0])
-
-    cudnn.benchmark = True
+    log = SimpleLog(args.verbose)
+    engine = InterpolateEngine(args.model, args.gpu_ids)
+    interpolater = Interpolate(engine.model, log.log)
 
     ## save paths
     save_path = args.save_folder
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
-    # defaults instead of unneeded arguments from their original code
-    args.crop_size = 192
-    args.dist = False
-    args.rank = -1
-    args.phase = "test"
-    args.resume_flownet = ""
-    args.net_name = "VFIformer"
+    # basepath = args.base_path
+    # basefile = args.base_name
+    # start = args.img_first
+    # end = args.img_last
+    # num_width = args.num_width
+    # working_prefix = os.path.join(save_path, basefile)
 
-    ## load model
-    device = torch.device('cuda' if len(args.gpu_ids) != 0 else 'cpu')
-    args.device = device
-    net = define_G(args)
-    net = load_networks(net, args.model)
-    net.eval()
+    split_frames(interpolater, args.num_splits, args.img_before, args.img_after, args.save_folder, "frame", args.num_width, start=0, end=1)
 
-    basepath = args.base_path
-    basefile = args.base_name
-    start = args.img_first
-    end = args.img_last
-    num_width = args.num_width
-    working_prefix = os.path.join(save_path, basefile)
-    pbar_desc = "Frames" if args.num_splits < 2 else "Total"
-    for n in tqdm(range(start, end), desc=pbar_desc, position=0):
-        continued = n > start
-        split_frames(net, args.num_splits, basepath, basefile, n, n+1, num_width, working_prefix, save_path, continued)
 
-def split_frames(net, num_splits, basepath, basefile, start, end, num_width, working_prefix, save_path, continued):
-    init_record()
-    reset_split_count(num_splits)
+    # pbar_desc = "Frames" if args.num_splits < 2 else "Total"
+    # for n in tqdm(range(start, end), desc=pbar_desc, position=0):
+    #     continued = n > start
+    #     split_frames_in_sequence(interpolater, args.num_splits, basepath, basefile, n, n+1, num_width, working_prefix, save_path, continued)
 
-    # Computing the count of work steps needed based on the number of splits:
-    # Before splitting, there's one existing region between the start & end frames.
-    # Each split doubles the number of regions.
-    # Work steps = the final number of region - the existing region.
-    max_steps = 2 ** num_splits - 1
-    init_progress(num_splits, max_steps, "Frame #" + str(start + 1))
 
-    first_file = source_filepath(basepath, basefile, start, num_width)
-    last_file = source_filepath(basepath, basefile, end, num_width)
-    img0 = cv2.imread(first_file)
-    img1 = cv2.imread(last_file)
+# Add a long alpha sortable floating point number to a 
+# filepath prefix representing the split position.
+def indexed_filepath(filepath_prefix, index):
+    return filepath_prefix + f"{index:1.24f}.png"
 
-    # create 0.0 and 1.0 versions of the outer real frames
-    first_index = 0.0
-    last_index = 1.0
-    first_file = working_filepath(working_prefix, first_index)
-    last_file = working_filepath(working_prefix, last_index)
+def set_up_outer_frames(before_file, after_file, output_filepath_prefix):
+    global log
+    img0 = cv2.imread(before_file)
+    img1 = cv2.imread(after_file)
 
-    cv2.imwrite(first_file, img0)
-    record_frame(first_index)
-    log("main() saved " + first_file)
+    # create outer 0.0 and 1.0 versions of original frames
+    before_index, after_index = 0.0, 1.0
+    before_file = indexed_filepath(output_filepath_prefix, before_index)
+    after_file = indexed_filepath(output_filepath_prefix, after_index)
 
-    cv2.imwrite(last_file, img1)
-    record_frame(last_index)
-    log("main() saved " + last_file)
+    cv2.imwrite(before_file, img0)
+    register_frame(before_file)
+    log.log("copied " + before_file)
 
-    recursive_split_frames(net, first_index, last_index, working_prefix)
-    integerize_filenames(working_prefix, save_path, basefile, start, end, continued, num_width)
+    cv2.imwrite(after_file, img1)
+    register_frame(after_file)
+    log.log("copied " + after_file)
+
+# output_filepath_prefix should be the first part of a path+filename
+# that will have an position index and file extension added for saving working results
+def split_frames(interpolater, num_splits, before_filepath, after_filepath, output_path, 
+                base_filename, progress_label="Frame", continued=False, num_width=5, start=0, end=1):
+    init_frame_register()
+    reset_split_manager(num_splits)
+    num_steps = max_steps(num_splits)
+    init_progress(num_splits, num_steps, progress_label)
+
+    output_filepath_prefix = os.path.join(output_path, base_filename)
+    set_up_outer_frames(before_filepath, after_filepath, output_filepath_prefix)
+
+    recursive_split_frames(interpolater, 0.0, 1.0, output_filepath_prefix)
+    integerize_filenames(output_filepath_prefix, output_path, base_filename, start, end, continued, num_width)
     close_progress()
 
-def recursive_split_frames(net, first_index, last_index, filepath_prefix):
+
+# def split_frames_in_sequence(interpolater, num_splits, basepath, basefile, start, end, num_width, working_prefix, save_path, continued):
+#     init_register()
+#     reset_split_count(num_splits)
+#     num_steps = max_steps(num_splits)
+#     init_progress(num_splits, num_steps, "Frame #" + str(start + 1))
+
+
+#     recursive_split_frames(interpolater, first_index, last_index, working_prefix)
+#     integerize_filenames(working_prefix, save_path, basefile, start, end, continued, num_width)
+#     close_progress()
+
+def recursive_split_frames(interpolater : Interpolate, first_index : float, last_index : float, filepath_prefix : str):
     if enter_split():
         mid_index = first_index + (last_index - first_index) / 2.0
-        first_filepath = working_filepath(filepath_prefix, first_index)
-        last_filepath = working_filepath(filepath_prefix, last_index)
-        mid_filepath = working_filepath(filepath_prefix, mid_index)
+        first_filepath = indexed_filepath(filepath_prefix, first_index)
+        last_filepath = indexed_filepath(filepath_prefix, last_index)
+        mid_filepath = indexed_filepath(filepath_prefix, mid_index)
 
-        create_mid_frame(net, first_filepath, last_filepath, mid_filepath)
-        record_frame(mid_index)
+        interpolater.create_between_frame(first_filepath, last_filepath, mid_filepath)
+        register_frame(mid_filepath)
         step_progress()
 
         # deal with two new split regions
-        recursive_split_frames(net, first_index, mid_index, filepath_prefix)
-        recursive_split_frames(net, mid_index, last_index, filepath_prefix)
+        recursive_split_frames(interpolater, first_index, mid_index, filepath_prefix)
+        recursive_split_frames(interpolater, mid_index, last_index, filepath_prefix)
         exit_split()
 
-def create_mid_frame(net, first_filepath, last_filepath, mid_filepath):
-    img0 = cv2.imread(first_filepath)
-    img1 = cv2.imread(last_filepath)
-
-    divisor = 64
-    h, w, _ = img0.shape
-    if h % divisor != 0 or w % divisor != 0:
-        h_new = math.ceil(h / divisor) * divisor
-        w_new = math.ceil(w / divisor) * divisor
-        pad_t = (h_new - h) // 2
-        pad_d = (h_new - h) // 2 + (h_new - h) % 2
-        pad_l = (w_new - w) // 2
-        pad_r = (w_new - w) // 2 + (w_new - w) % 2
-        img0 = cv2.copyMakeBorder(img0.copy(), pad_t, pad_d, pad_l, pad_r, cv2.BORDER_CONSTANT, value=0)  # cv2.BORDER_REFLECT
-        img1 = cv2.copyMakeBorder(img1.copy(), pad_t, pad_d, pad_l, pad_r, cv2.BORDER_CONSTANT, value=0)
-    else:
-        pad_t, pad_d, pad_l, pad_r = 0, 0, 0, 0
-
-    img0 = torch.from_numpy(img0.astype('float32') / 255.).float().permute(2, 0, 1).cuda().unsqueeze(0)
-    img1 = torch.from_numpy(img1.astype('float32') / 255.).float().permute(2, 0, 1).cuda().unsqueeze(0)
-
-    with torch.no_grad():
-        output, _ = net(img0, img1, None)
-        h, w = output.size()[2:]
-        output = output[:, :, pad_t:h-pad_d, pad_l:w-pad_r]
-
-    imt = output[0].flip(dims=(0,)).clamp(0., 1.)
-    torchvision.utils.save_image(imt, mid_filepath)
-    log("create_mid_frame() saved " + mid_filepath)
-
-def integerize_filenames(working_filepath_prefix, save_path, base_name, start, end, continued, num_width):
+def integerize_filenames(output_filepath_prefix, save_path, base_name, start, end, continued, num_width):
+    global log
     new_prefix = save_path + "//" + base_name + "[" + str(start).zfill(num_width) + "-" + str(end).zfill(num_width) + "]"
-
-    frames = sorted_frames()
-    this_round_num_width = len(str(len(frames)))
+    frame_files = sorted_registered_frames()
+    this_round_num_width = len(str(len(frame_files)))
 
     index = 0
-    for f in sorted_frames():
+    for file in frame_files:
         # orig_filename = working_filepath_prefix + str(f) + ".png"
-        orig_filename = working_filepath(working_filepath_prefix, f)
-
         if continued and index == 0:
             # if a continuation from a previous set of frames, delete the first frame
-            # since it's duplicate of the previous round last frame
-            os.remove(orig_filename)
-            log("integerize_filenames() removed uneeded " + orig_filename)
+            # to maintain continuity since it's duplicate of the previous round last frame
+            os.remove(file)
+            log.log("removed uneeded " + file)
         else:
             new_filename = new_prefix + str(index).zfill(this_round_num_width) + ".png"
-            os.replace(orig_filename, new_filename)
-            log("integerize_filenames() renamed " + orig_filename + " to " + new_filename)
-
+            os.replace(file, new_filename)
+            log.log("renamed " + file + " to " + new_filename)
         index += 1
 
 global split_count
-def reset_split_count(num_splits):
+def reset_split_manager(num_splits):
     global split_count
     split_count = num_splits
 
@@ -194,27 +159,18 @@ def exit_split():
     global split_count
     split_count += 1
 
-global frame_record
-def init_record():
-    global frame_record
-    frame_record = []
+global frame_register
+def init_frame_register():
+    global frame_register
+    frame_register = []
 
-def record_frame(index):
-    global frame_record
-    frame_record.append(index)
+def register_frame(filename : str):
+    global frame_register
+    frame_register.append(filename)
 
-def sorted_frames():
-    global frame_record
-    return sorted(frame_record)
-
-global verbose
-def init_log(verbose_enabled):
-    global verbose
-    verbose = verbose_enabled
-
-def log(message):
-    if verbose:
-        print(message)
+def sorted_registered_frames():
+    global frame_register
+    return sorted(frame_register)
 
 global split_progress
 split_progress = None
@@ -236,30 +192,11 @@ def close_progress():
     if split_progress:
         split_progress.close()
 
-def source_filepath(basepath, basefile, index, num_width):
-    filename = basefile + str(index).zfill(num_width) + ".png"
-    return os.path.join(basepath, filename)
+# def source_filepath(basepath, basefile, index, num_width):
+#     filename = basefile + str(index).zfill(num_width) + ".png"
+#     return os.path.join(basepath, filename)
 
-def working_filepath(filepath_prefix, index):
-    return filepath_prefix + f"{index:1.24f}.png"
 
-def load_networks(network, resume, strict=True):
-    load_path = resume
-    if isinstance(network, nn.DataParallel) or isinstance(network, DistributedDataParallel):
-        network = network.module
-    load_net = torch.load(load_path, map_location=torch.device('cpu'))
-    load_net_clean = OrderedDict()  # remove unnecessary 'module.'
-    for k, v in load_net.items():
-        if k.startswith('module.'):
-            load_net_clean[k[7:]] = v
-        else:
-            load_net_clean[k] = v
-    if 'optimizer' or 'scheduler' in net_name:
-        network.load_state_dict(load_net_clean)
-    else:
-        network.load_state_dict(load_net_clean, strict=strict)
-
-    return network
 
 # todo
 # with one split the secondary tqdm is not needed, with verbose both not needed
