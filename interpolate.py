@@ -38,6 +38,7 @@ class Interpolate:
             self.log_fn(message)
 
     def create_between_frame(self, before_filepath : str, after_filepath : str, middle_filepath : str):
+        # code borrowed from demo.py
         img0 = cv2.imread(before_filepath)
         img1 = cv2.imread(after_filepath)
 

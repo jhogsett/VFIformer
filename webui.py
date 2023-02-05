@@ -35,12 +35,12 @@ def interpolate(img_before_file : str, img_after_file : str, num_splits : float)
     file_output.update(visible=False)
     if img_before_file and img_after_file:
         interpolater = Interpolate(engine.model, log.log)
-
         output_path = config.directories["output_interpolate"]
         output_basename = "interpolate"
         img_between_file = AutoIncrementFilename(output_path).next_filename(output_basename, "png")
+
         log.log("creating frame file " + img_between_file)
-        interpolater.create_mid_frame(img_before_file, img_after_file, img_between_file)
+        interpolater.create_between_frame(img_before_file, img_after_file, img_between_file)
 
         img_output_gif = AutoIncrementFilename(output_path).next_filename(output_basename, "gif")
         log.log("creating animated gif file " + img_between_file)

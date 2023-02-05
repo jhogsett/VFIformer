@@ -3,11 +3,8 @@ from collections import OrderedDict
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
-from skimage.color import rgb2yuv, yuv2rgb
-from utils.util import setup_logger, print_args
-from utils.pytorch_msssim import ssim_matlab
 from models.modules import define_G
-from collections import namedtuple
+from simple_utils import FauxArgs
 
 # Singleton class with the loaded VFIformer model
 # model: path to model such as "./pretrained_models/pretrained_VFIformer/net_220.pth"
@@ -24,6 +21,7 @@ class InterpolateEngine:
         self.model = self.init_model(model, gpu_id_array)
 
     def init_device(self, gpu_ids : str):
+        # code borrowed from demo.py
         str_ids = gpu_ids.split(',')
         gpu_ids = []
         for str_id in str_ids:
@@ -36,8 +34,9 @@ class InterpolateEngine:
         return gpu_ids
 
     def init_model(self, model, gpu_id_array):
+        # code borrowed from demo.py
         device = torch.device('cuda' if len(gpu_id_array) != 0 else 'cpu')
-        args = Args(model = model,
+        args = FauxArgs(model = model,
                     gpu_ids = gpu_id_array,
                     device = device,
                     # needed in original downstream code
@@ -53,6 +52,7 @@ class InterpolateEngine:
         return net
 
     def load_networks(self, network, resume, strict=True):
+        # code borrowed from demo.py
         load_path = resume
         if isinstance(network, nn.DataParallel) or isinstance(network, DistributedDataParallel):
             network = network.module
@@ -69,5 +69,5 @@ class InterpolateEngine:
             network.load_state_dict(load_net_clean, strict=strict)
         return network
 
-def Args(**kwargs):
-    return namedtuple("Args", kwargs.keys())(**kwargs)
+# def FauxArgs(**kwargs):
+#     return namedtuple("FauxArgs", kwargs.keys())(**kwargs)
