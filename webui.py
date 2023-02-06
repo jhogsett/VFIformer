@@ -1,6 +1,5 @@
 import os
 import argparse
-import numpy as np
 import gradio as gr
 from interpolate_engine import InterpolateEngine
 from interpolate import Interpolate
@@ -14,7 +13,6 @@ from simple_utils import max_steps
 
 def main():
     global log, config, engine
-
     parser = argparse.ArgumentParser(description='VFIformer Web UI')
     parser.add_argument("--config_path", type=str, default="config.yaml", help="path to config YAML file")
     parser.add_argument("--verbose", dest="verbose", default=False, action="store_true", help="Show extra details")
@@ -30,34 +28,6 @@ def main():
                 server_name = config.server_name,
                 server_port = config.server_port)
 
-def interpolate(img_before_file : str, img_after_file : str, num_splits : float):
-    global log, config, engine, file_output
-    file_output.update(visible=False)
-
-    if img_before_file and img_after_file:
-        interpolater = Interpolate(engine.model, log.log)
-
-        base_output_path = config.directories["output_interpolate"]
-        output_path, _ = AutoIncrementDirectory(base_output_path).next_directory("run")
-
-        output_basename = "interpolated_frames"
-        extension = "png"
-        img_between_file, image_index = AutoIncrementFilename(output_path, extension).next_filename(output_basename, extension)
-
-        log.log("creating frame file " + img_between_file)
-        interpolater.create_between_frame(img_before_file, img_after_file, img_between_file)
-
-        img_output_gif = os.path.join(output_path, output_basename + str(image_index) + ".gif")
-        log.log("creating preview file " + img_between_file)
-        duration = config.interpolate_settings["gif_duration"]
-        create_gif([img_before_file, img_between_file, img_after_file], img_output_gif, duration=duration)
-
-        download_visible = num_splits == 1
-        download_file = img_between_file if download_visible else None
-        return gr.Image.update(value=img_output_gif), gr.File.update(value=download_file, visible=download_visible)
-    else:
-        return None, None
-
 def deep_interpolate(img_before_file : str, img_after_file : str, num_splits : float):
     global log, config, engine, file_output
     file_output.update(visible=False)
@@ -65,10 +35,8 @@ def deep_interpolate(img_before_file : str, img_after_file : str, num_splits : f
     if img_before_file and img_after_file:
         interpolater = Interpolate(engine.model, log.log)
         deep_interpolater = DeepInterpolate(interpolater, log.log)
-
         base_output_path = config.directories["output_interpolate"]
         output_path, _ = AutoIncrementDirectory(base_output_path).next_directory("run")
-
         output_basename = "interpolated_frames"
         extension = "png"
         img_between_file, image_index = AutoIncrementFilename(output_path, extension).next_filename(output_basename, extension)
@@ -76,8 +44,8 @@ def deep_interpolate(img_before_file : str, img_after_file : str, num_splits : f
         log.log("creating frame file " + img_between_file)
         deep_interpolater.split_frames(img_before_file, img_after_file, num_splits, output_path, output_basename)
 
-        img_output_gif = os.path.join(output_path, output_basename + str(image_index) + ".gif")
         log.log("creating preview file " + img_between_file)
+        img_output_gif = os.path.join(output_path, output_basename + str(image_index) + ".gif")
         output_paths = deep_interpolater.output_paths
         duration = config.interpolate_settings["gif_duration"] / len(output_paths)
         create_gif(output_paths, img_output_gif, duration=duration)
@@ -89,9 +57,6 @@ def deep_interpolate(img_before_file : str, img_after_file : str, num_splits : f
         return None, None
 
 def update_splits_info(num_splits : float):
-    # before the splits, there's one time region between the before and after frames
-    # after the splits, there are 2 ** num_splits time regions
-    # subtracting the original time region yields the number of new regions = number of new frames
     return str(max_steps(num_splits))
 
 def create_ui():
@@ -113,56 +78,42 @@ def create_ui():
                     img_output = gr.Image(type="filepath", label="Animated Preview", interactive=False)
                     file_output = gr.File(type="file", label="Download", visible=False)
             interpolate_button = gr.Button("Interpolate", variant="primary")
-        with gr.Tab("Slow Motion"):
+        with gr.Tab("Video Inflation"):
             with gr.Row(variant="compact"):
-                image_input = gr.Image()
-                image_output = gr.Image()
-            image_button = gr.Button("Flip")
-
+                with gr.Column(variant="panel"):
+                    gr.Markdown("""
+                    # Inflate a video, both in resolution and frame rate
+                    - split video into a series of PNG frames
+                    - use R-ESRGAN 4x+ to restore and/or upscale
+                    - use VFIformer to:
+                      - increase frame rate, or
+                      - create super slow motion, or
+                      - reconstruct timelapsed video
+                    - reassemble new PNG frames into MP4 file
+                    """)
+        with gr.Tab("gif2mp4"):
+            with gr.Row(variant="compact"):
+                with gr.Column(variant="panel"):
+                    gr.Markdown("""
+                    # Recover the original video from animated GIF file
+                    - split GIF into a series of PNG frames
+                    - use R-ESRGAN 4x+ to restore and/or upscale
+                    - use VFIformer to adjust frame rate to real time
+                    - reassemble new PNG frames into MP4 file
+                    """)
+        with gr.Tab("Tools"):
+            with gr.Row(variant="compact"):
+                with gr.Column(variant="panel"):
+                    gr.Markdown("""
+                    # Tools
+                    - split a GIF or MP4 into a series of PNG frames
+                    - rename a sequence of PNG files suitable for import into Premiere Pro
+                    - recombine a series of PNG frames into an MP4
+                    - ?
+                    """)
         interpolate_button.click(deep_interpolate, inputs=[img1_input, img2_input, splits_input], outputs=[img_output, file_output])
         splits_input.change(update_splits_info, inputs=splits_input, outputs=info_output, show_progress=False)
-        # image_button.click(flip_image, inputs=image_input, outputs=image_output)
     return app
-
-# todo
-# upgrade to create any number of mid frames (infinite slow motion)
-#   have a slider for number of splits, show number of new frames to be created
-#   include them in the animation, target a single overall play time for the animation regardless of frames
-#   need a numbering scheme
-#     upgrade auto inc filename:
-#       search by file extension to isolate into "runs"
-#       maybe auto increment folders instead, put all the stuff into the new folder including copies of original images properly sequenced
-#   target gif animation to be a specific time like two seconds with the animation duration adjusted to fit
-
-# for videos
-#   need to be able to accept a .mp4 file and dump into a series of PNG frames, perhaps ffmpeg for simplicity
-#   need to be able to recreate a video from the PNG frames, maybe ffmpeg
-#   ffmpy
-#   important: slow process, upscaling or external post processing
-#   - splitting frames is a very slow process
-#     - would be nice to see the frames as they are being created
-#     - need to be able to resume an aborted or failed process, maybe copy the files into the folder in a way that makes it easy to resume
-#     - should be able to manually resume with settings
-#   - user might want some external process to be run before putting back into a video, so make it easy thru settings 
-
-# gif2mp4 idea
-# - input a git, split into pngs, allow for external process on them, recombine into mp4
-
-# timelapse-to-original video
-
-# step2cont(inuous)?
-
-# general mp4 upscaling
-# - rip to pngs
-# - upscale to whatever size
-# - upscale to whatever frame rate
-# - recombine into mp4 with quality settings
-
-
-
-# how EASY is it to incorporate R-ESRGAN 4x+ directly.
-
-# after interpolate, have options to download as a zip, gif or mp4
 
 if __name__ == '__main__':
     main()

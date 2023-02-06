@@ -22,6 +22,7 @@ def get_directories(path : str) -> list:
     entries = os.listdir(path)
     directories = []
     for entry in entries:
-        if os.path.isdir(entry):
+        fullpath = os.path.join(path, entry)
+        if os.path.isdir(fullpath):
             directories.append(entry)
     return directories
