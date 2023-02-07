@@ -1,3 +1,11 @@
+idea: infinite slowdown without stopping
+
+idea: video from GIF
+
+
+
+
+
 arbitrary upscale:
 - point to a collection of png files, it can figure out num_width, start, end, base name
 - specify first frame, last frame, steps to recreate in between
@@ -135,3 +143,70 @@ compute
 fix glitch:
 - point to a collection of png files, it can figure out num_width
 - specify first bad frame, last bad frame
+
+
+
+
+
+
+written as 60 fps
+recorded as 20X less often frames
+one second hand movement per frame, three per second
+so this is 3 FPS
+expanded 16X
+becomes 48 FPS
+to view at 30 FPS run at 160% speed
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# todo
+# for videos
+#   need to be able to accept a .mp4 file and dump into a series of PNG frames, perhaps ffmpeg for simplicity
+#   need to be able to recreate a video from the PNG frames, maybe ffmpeg
+#   ffmpy
+#   important: slow process, upscaling or external post processing
+#   - splitting frames is a very slow process
+#     - would be nice to see the frames as they are being created
+#     - need to be able to resume an aborted or failed process, maybe copy the files into the folder in a way that makes it easy to resume
+#     - should be able to manually resume with settings
+#   - user might want some external process to be run before putting back into a video, so make it easy thru settings 
+
+# gif2mp4 idea
+# - input a git, split into pngs, allow for external process on them, recombine into mp4
+
+# timelapse-to-original video
+
+# step2cont(inuous)?
+
+# general mp4 upscaling
+# - rip to pngs
+# - upscale to whatever size
+# - upscale to whatever frame rate
+# - recombine into mp4 with quality settings
+
+
+
+# how EASY is it to incorporate R-ESRGAN 4x+ directly.
+
+# after interpolate, have options to download as a zip, gif or mp4
+
+
+
